@@ -1,0 +1,178 @@
+
+let timeOffset = 0;
+let showGrandOnly = false;
+
+function argentinaNow() {
+    return Date.now() + timeOffset * 60000;
+}
+
+function createInitialTrains() {
+    const now = Date.now();
+
+    return [
+        {direction:"villa", destination:"VILLA ROSA", arrival:now},
+        {direction:"villa", destination:"VILLA ROSA", arrival:now + 23*60000},
+        {direction:"villa", destination:"GRAND BOURG", arrival:now + 41*60000},
+
+        {direction:"retiro", destination:"RETIRO", arrival:now + 5*60000},
+        {direction:"retiro", destination:"RETIRO", arrival:now + 24*60000},
+        {direction:"retiro", destination:"RETIRO", arrival:now + 42*60000}
+    ];
+}
+
+let trains = createInitialTrains();
+
+function updateClock() {
+    const now = new Date(argentinaNow());
+
+    document.getElementById("clock").textContent =
+        new Intl.DateTimeFormat("es-AR", {
+            timeZone:"America/Argentina/Buenos_Aires",
+            hour:"2-digit",
+            minute:"2-digit",
+            hourCycle:"h23"
+        }).format(now);
+
+    document.getElementById("date").textContent =
+        new Intl.DateTimeFormat("es-AR", {
+            timeZone:"America/Argentina/Buenos_Aires",
+            weekday:"long",
+            day:"2-digit",
+            month:"long",
+            year:"numeric"
+        }).format(now).toUpperCase();
+}
+
+function changeTime(amount) {
+    timeOffset += amount;
+    update();
+}
+
+function toggleGrand() {
+    showGrandOnly = !showGrandOnly;
+
+    document.getElementById("grandButton")
+        .classList.toggle("active", showGrandOnly);
+
+    render();
+}
+
+function addTrain() {
+    const direction = document.getElementById("direction").value;
+    const destination = document.getElementById("destination").value;
+    const time = document.getElementById("arrivalTime").value;
+
+    if (!time) {
+        alert("Seleccioná un horario.");
+        return;
+    }
+
+    const [hours, minutes] = time.split(":").map(Number);
+
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone:"America/Argentina/Buenos_Aires",
+        year:"numeric",
+        month:"2-digit",
+        day:"2-digit"
+    });
+
+    const parts = formatter.formatToParts(new Date(argentinaNow()));
+    const dateParts = Object.fromEntries(
+        parts.map(p => [p.type, p.value])
+    );
+
+    const date = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+
+    // Argentina utiliza UTC-3.
+    let arrival = new Date(
+        `${date}T${String(hours).padStart(2,"0")}:${String(minutes).padStart(2,"0")}:00-03:00`
+    ).getTime();
+
+    if (arrival <= argentinaNow()) {
+        arrival += 24 * 60 * 60000;
+    }
+
+    trains.push({
+        direction,
+        destination,
+        arrival
+    });
+
+    render();
+}
+
+function renderGroup(direction, title) {
+    const list = trains
+        .filter(t => t.direction === direction)
+        .filter(t => !showGrandOnly ||
+            t.destination === "GRAND BOURG")
+        .sort((a,b) => a.arrival - b.arrival);
+
+    const rows = list.map(t => {
+        const remaining = Math.max(
+            0,
+            Math.ceil((t.arrival - argentinaNow()) / 60000)
+        );
+
+        let style = "villa";
+
+        if (t.destination === "GRAND BOURG") {
+            style = "grand";
+        } else if (direction === "retiro") {
+            style = "retiro";
+        }
+
+        return `
+            <div class="train ${style}">
+                <div class="destination">${t.destination}</div>
+                <div class="arrival">${remaining} min</div>
+            </div>
+        `;
+    }).join("");
+
+    return `
+        <section class="direction">
+            <div class="column-head">
+                <div>SENTIDO</div>
+                <div>DESTINO</div>
+                <div>TIEMPO ESTIMADO</div>
+            </div>
+
+            <div class="train-group">
+                <div class="direction-name">${title}</div>
+                <div class="trains">
+                    ${rows || '<div style="padding:20px;text-align:center">SIN LLEGADAS</div>'}
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+function render() {
+    document.getElementById("boards").innerHTML =
+        renderGroup("villa", "VILLA ROSA") +
+        renderGroup("retiro", "RETIRO");
+
+    updateClock();
+}
+
+function update() {
+    render();
+}
+
+function resetSimulation() {
+    timeOffset = 0;
+    trains = createInitialTrains();
+    showGrandOnly = false;
+
+    document.getElementById("grandButton")
+        .classList.remove("active");
+
+    document.getElementById("arrivalTime").value = "10:50";
+
+    render();
+}
+
+// Actualización automática cada segundo.
+render();
+setInterval(update, 1000);
